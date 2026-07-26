@@ -1,0 +1,29 @@
+services:
+  automations:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Pass-through from the host shell; unset values stay unset (no secrets in the image).
+      - DEVIN_API_KEY
+      - DEVIN_ORG_ID
+      - GITHUB_TOKEN
+      - GITHUB_WEBHOOK_SECRET
+      - TARGET_REPO
+      - MOCK_DEVIN
+      - MAX_ACU_LIMIT
+      - MAX_CONCURRENT_SESSIONS
+
+  smee:
+    image: node:20-alpine
+    profiles: ["tunnel"]
+    command: sh -c "npx --yes smee-client --url $$SMEE_URL --target http://automations:8080/webhook"
+    environment:
+      - SMEE_URL
+    depends_on:
+      - automations
