@@ -1,0 +1,44 @@
+{
+  "action": "labeled",
+  "issue": {
+    "number": 101,
+    "title": "Bandit B113: requests call without a timeout in superset/utils/network.py",
+    "body": "**Scanner:** bandit 1.7.9\\n**Rule:** B113 request_without_timeout (severity: medium, confidence: low)\\n**Location:** `superset/utils/network.py:42`\\n\\n```python\\nresponse = requests.get(url, headers=headers)\\n```\\n\\nA `requests` call without an explicit `timeout` can hang forever, holding a worker thread and eventually starving the pool.\\n\\n### Acceptance criteria\\n- [ ] Every `requests.*` call in the touched module passes an explicit `timeout`.\\n- [ ] The timeout is configurable rather than a magic number where a setting already exists.\\n- [ ] Existing behaviour is unchanged on the happy path.\\n- [ ] Lint on touched files and unit tests for the touched module pass.\\n",
+    "html_url": "https://github.com/priyalwalpita/superset/issues/101",
+    "state": "open",
+    "user": {
+      "login": "security-scanner-bot",
+      "type": "Bot"
+    },
+    "labels": [
+      {
+        "name": "security",
+        "color": "b60205"
+      },
+      {
+        "name": "devin:remediate",
+        "color": "efb341"
+      }
+    ],
+    "created_at": "2026-07-20T09:14:02Z",
+    "updated_at": "2026-07-20T09:31:55Z"
+  },
+  "label": {
+    "name": "devin:remediate",
+    "color": "efb341",
+    "description": "Hand this finding to Devin Automations"
+  },
+  "repository": {
+    "full_name": "priyalwalpita/superset",
+    "name": "superset",
+    "default_branch": "master",
+    "owner": {
+      "login": "priyalwalpita"
+    },
+    "html_url": "https://github.com/priyalwalpita/superset"
+  },
+  "sender": {
+    "login": "priyalwalpita",
+    "type": "User"
+  }
+}
