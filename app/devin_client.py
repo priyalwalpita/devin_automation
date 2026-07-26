@@ -128,8 +128,8 @@ class MockDevinClient:
         if elapsed >= self.PR_AT:
             payload["pull_requests"] = [
                 {
-                    "url": f"https://github.com/{settings.target_repo}/pull/9{issue_number}",
-                    "state": "open",
+                    "pr_url": f"https://github.com/{settings.target_repo}/pull/9{issue_number}",
+                    "pr_state": "open",
                 }
             ]
 
