@@ -246,8 +246,11 @@ async def sync_session(row: dict[str, Any]) -> None:
     pull_requests = session.get("pull_requests") or []
     if pull_requests and not row.get("pr_url"):
         first = pull_requests[0]
-        pr_url = first.get("url") if isinstance(first, dict) else str(first)
-        pr_state = first.get("state") if isinstance(first, dict) else None
+        if isinstance(first, dict):
+            pr_url = first.get("pr_url") or first.get("url")
+            pr_state = first.get("pr_state") or first.get("state")
+        else:
+            pr_url, pr_state = str(first), None
         updates.update({"pr_url": pr_url, "pr_state": pr_state, "pr_ts": time.time()})
         if not db.has_event(issue_number, "pr_opened"):
             db.log_event(issue_number, "pr_opened", pr_url or "")
