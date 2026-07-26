@@ -155,6 +155,7 @@ No secret is ever baked into the image, committed, or logged; `.gitignore` cover
 | Response `{"status":"duplicate_ignored"}` | That issue number is already tracked — intake is idempotent by design. |
 | Sessions land in `failed` with a quota reason | Devin suspended the session on an ACU/credit limit; raise `MAX_ACU_LIMIT` or top up, then re-label the issue after deleting the row. |
 | Nothing happens after labelling | Check the repo webhook's *Recent Deliveries* (200 expected), that the service is reachable, `TARGET_REPO`/`TRIGGER_LABEL` match, and `/logs` for `webhook_ignored` reasons. |
+| A row sits in `running` while `/logs` shows repeated `poll failed` | The session can no longer be resolved (restart in mock mode, deleted session, API outage). After 5 consecutive failed polls the row is failed with the reason and releases its concurrency slot. |
 | Heartbeat chip is red | The poller stalled or never started — check `/logs` for `poller cycle error` and restart the container. |
 | Comments never appear on the issue | `GITHUB_TOKEN` unset (log-only mode) or missing `Issues: write` on the target repo; GitHub errors are logged, never fatal. |
 
