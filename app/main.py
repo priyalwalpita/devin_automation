@@ -30,6 +30,10 @@ github = GitHubClient()
 _LIMIT_MARKERS = ("acu", "limit", "quota", "credit", "budget")
 _launch_lock = asyncio.Lock()
 
+# A session whose polls keep failing is given up on rather than holding a slot forever.
+MAX_CONSECUTIVE_POLL_FAILURES = 5
+_poll_failures: dict[int, int] = {}
+
 
 def _configure_logging() -> None:
     log.setLevel(logging.INFO)
@@ -215,8 +219,21 @@ async def sync_session(row: dict[str, Any]) -> None:
     try:
         session = await devin.get_session(session_id)
     except Exception as exc:  # noqa: BLE001 - transient API errors must not kill the poller
-        log.warning("poll failed for #%s (%s): %s", issue_number, session_id, exc)
+        failures = _poll_failures.get(issue_number, 0) + 1
+        _poll_failures[issue_number] = failures
+        log.warning(
+            "poll failed for #%s (%s), attempt %s/%s: %s",
+            issue_number,
+            session_id,
+            failures,
+            MAX_CONSECUTIVE_POLL_FAILURES,
+            exc,
+        )
+        if failures >= MAX_CONSECUTIVE_POLL_FAILURES:
+            await _give_up(issue_number, f"session unreachable after {failures} polls: {exc}")
         return
+
+    _poll_failures.pop(issue_number, None)
 
     status = (session.get("status") or "").lower()
     detail = (session.get("status_detail") or "").lower()
@@ -299,6 +316,19 @@ async def sync_session(row: dict[str, Any]) -> None:
 
     updates["state"] = "running"
     db.update(issue_number, **updates)
+
+
+async def _give_up(issue_number: int, reason: str) -> None:
+    """Fail a row whose session can no longer be reached so it releases its slot."""
+    _poll_failures.pop(issue_number, None)
+    db.update(issue_number, state="failed", error=reason[:500], completed_ts=time.time())
+    if not db.has_event(issue_number, "failed"):
+        db.log_event(issue_number, "failed", reason[:200])
+        log.error("giving up on issue #%s: %s", issue_number, reason)
+        await github.comment(
+            issue_number,
+            f"❌ **Devin Automations** lost track of this remediation session.\n\nReason: `{reason}`",
+        )
 
 
 async def sync_all() -> None:

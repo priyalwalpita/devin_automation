@@ -24,6 +24,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app import db, observability  # noqa: E402
 from app.devin_client import MockDevinClient  # noqa: E402
+from app import main  # noqa: E402
 from app.main import _configure_logging, app, process_queue, sync_all  # noqa: E402
 
 MockDevinClient.PR_AT = 2.0
@@ -161,3 +162,21 @@ def test_dashboard_render(results: dict) -> None:
     assert f"https://github.com/priyalwalpita/superset/pull/9{ISSUE_NUMBER}" in html
     assert "COMPLETED" in html
     assert "LIVE LOGS" in html
+
+
+def test_unreachable_session_is_given_up(results: dict) -> None:
+    """A session the API can no longer resolve must fail instead of holding a slot."""
+    unreachable = 999
+    db.enqueue(unreachable, "orphaned session", "", "")
+    db.update(unreachable, state="running", session_id="devin-mock-gone", launched_ts=1.0)
+
+    async def poll_until_failed() -> None:
+        for _ in range(main.MAX_CONSECUTIVE_POLL_FAILURES):
+            await main.sync_session(db.rows(states=("running",))[0])
+
+    asyncio.run(poll_until_failed())
+
+    row = next(r for r in db.rows() if r["issue_number"] == unreachable)
+    assert row["state"] == "failed"
+    assert "unreachable" in (row["error"] or "")
+    assert db.rows(states=db.ACTIVE_STATES) == []
