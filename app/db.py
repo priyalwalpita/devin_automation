@@ -107,6 +107,16 @@ def enqueue(
         return cur.rowcount == 1
 
 
+def requeue_stranded_launches() -> int:
+    """Return rows stuck in launching (process died mid-launch) to the queue."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE remediations SET state = 'queued', updated_ts = ? WHERE state = 'launching'",
+            (time.time(),),
+        )
+        return cur.rowcount
+
+
 def claim_queued(issue_number: int) -> bool:
     """Atomically move a row from queued to launching. False when someone else won it."""
     with _connect() as conn:
@@ -238,6 +248,11 @@ def metrics() -> dict[str, Any]:
         row["acus_consumed"] for row in all_rows if row["acus_consumed"] is not None
     ]
     total_acus = sum(reported_acus) if reported_acus else None
+    completed_acus = [
+        row["acus_consumed"]
+        for row in all_rows
+        if row["state"] == "completed" and row["acus_consumed"] is not None
+    ]
     prs_opened = sum(1 for row in all_rows if row["pr_url"])
 
     funnel = {
@@ -264,7 +279,7 @@ def metrics() -> dict[str, Any]:
         "completed_last_24h": completed_last_24h,
         "funnel": funnel,
         "total_acus": total_acus,
-        "avg_acus_per_fix": (total_acus / completed) if total_acus and completed else None,
+        "avg_acus_per_fix": _mean(completed_acus),
         "est_cost_usd": (total_acus * settings.acu_cost_usd) if total_acus is not None else None,
         "prs_opened": prs_opened,
     }

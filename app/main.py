@@ -49,6 +49,9 @@ def _configure_logging() -> None:
 async def lifespan(app: FastAPI):
     _configure_logging()
     db.init_db()
+    stranded = db.requeue_stranded_launches()
+    if stranded:
+        log.warning("requeued %s remediation(s) stranded in launching", stranded)
     log.info(
         "devin automations starting | mode=%s repo=%s label=%s concurrency=%s acu_cap=%s",
         "mock" if settings.mock_devin else "live",
