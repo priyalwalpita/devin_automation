@@ -273,9 +273,14 @@ async def sync_session(row: dict[str, Any]) -> None:
             )
         return
 
-    finished = detail == "finished" or status in ("exit", "exited", "finished", "completed")
+    structured = session.get("structured_output")
+    # A session idling on the user after emitting its required structured output is done, not blocked.
+    finished = (
+        detail == "finished"
+        or status in ("exit", "exited", "finished", "completed")
+        or (structured is not None and detail == "waiting_for_user")
+    )
     if finished:
-        structured = session.get("structured_output")
         updates.update(
             {
                 "state": "completed",

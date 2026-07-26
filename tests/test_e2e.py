@@ -164,6 +164,41 @@ def test_dashboard_render(results: dict) -> None:
     assert "LIVE LOGS" in html
 
 
+def test_waiting_for_user_completes_once_structured_output_exists(results: dict) -> None:
+    """Live sessions idle on the user instead of exiting; structured output means done."""
+
+    class StubDevin:
+        payload: dict = {}
+
+        async def get_session(self, session_id: str) -> dict:
+            return self.payload
+
+    stub = StubDevin()
+    real, main.devin = main.devin, stub
+    try:
+        waiting = 998
+        db.enqueue(waiting, "idle session", "", "")
+        db.update(waiting, state="running", session_id="sess-idle", launched_ts=1.0)
+        row = next(r for r in db.rows() if r["issue_number"] == waiting)
+
+        stub.payload = {"status": "running", "status_detail": "waiting_for_user"}
+        asyncio.run(main.sync_session(row))
+        assert next(r for r in db.rows() if r["issue_number"] == waiting)["state"] == "blocked"
+
+        stub.payload = {
+            "status": "running",
+            "status_detail": "waiting_for_user",
+            "structured_output": {"outcome": "fixed"},
+        }
+        asyncio.run(main.sync_session(row))
+        done = next(r for r in db.rows() if r["issue_number"] == waiting)
+        assert done["state"] == "completed"
+        assert json.loads(done["structured_out"])["outcome"] == "fixed"
+    finally:
+        main.devin = real
+        db.update(998, state="failed")
+
+
 def test_unreachable_session_is_given_up(results: dict) -> None:
     """A session the API can no longer resolve must fail instead of holding a slot."""
     unreachable = 999
