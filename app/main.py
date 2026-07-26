@@ -28,6 +28,7 @@ devin = make_client()
 github = GitHubClient()
 
 _LIMIT_MARKERS = ("acu", "limit", "quota", "credit", "budget")
+_launch_lock = asyncio.Lock()
 
 
 def _configure_logging() -> None:
@@ -128,23 +129,30 @@ async def webhook(request: Request) -> JSONResponse:
 
 
 async def process_queue() -> None:
-    """Launch queued remediations while under the concurrency limit."""
-    active = len(db.rows(states=db.ACTIVE_STATES))
-    for row in db.rows(states=("queued",)):
-        if active >= settings.max_concurrent_sessions:
-            log.info(
-                "concurrency gate: %s active sessions, issue #%s stays queued",
-                active,
-                row["issue_number"],
-            )
-            break
-        active += 1
-        await _launch(row)
+    """Launch queued remediations while under the concurrency limit.
+
+    The lock plus the conditional claim keep the webhook-triggered and
+    poller-triggered invocations from launching the same row twice.
+    """
+    async with _launch_lock:
+        active = len(db.rows(states=db.ACTIVE_STATES))
+        for row in db.rows(states=("queued",)):
+            if active >= settings.max_concurrent_sessions:
+                log.info(
+                    "concurrency gate: %s active sessions, issue #%s stays queued",
+                    active,
+                    row["issue_number"],
+                )
+                break
+            if not db.claim_queued(row["issue_number"]):
+                continue
+            active += 1
+            await _launch(row)
 
 
 async def _launch(row: dict[str, Any]) -> None:
+    """Start a session for a row already claimed into the launching state."""
     issue_number = row["issue_number"]
-    db.update(issue_number, state="launching")
     prompt = build_prompt(issue_number, row["issue_title"] or "", row["issue_body"] or "")
     title = f"Remediate {settings.target_repo}#{issue_number}: {(row['issue_title'] or '')[:80]}"
     try:

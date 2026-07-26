@@ -107,6 +107,17 @@ def enqueue(
         return cur.rowcount == 1
 
 
+def claim_queued(issue_number: int) -> bool:
+    """Atomically move a row from queued to launching. False when someone else won it."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE remediations SET state = 'launching', updated_ts = ? "
+            "WHERE issue_number = ? AND state = 'queued'",
+            (time.time(), issue_number),
+        )
+        return cur.rowcount == 1
+
+
 def update(issue_number: int, **fields: Any) -> None:
     unknown = set(fields) - set(REMEDIATION_FIELDS)
     if unknown:
